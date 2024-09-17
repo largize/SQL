@@ -1,0 +1,71 @@
+619. Biggest Single Number------------------------------------------------
+
+'using subquery in from'
+select max(num) as num
+from (select num, count(num) as countnum
+    from MyNumbers
+    group by num
+    having count(num) <= 1) as a
+
+'or using CTE'
+with temp as (
+    select num, count(num) as countnum
+    from MyNumbers
+    group by num)
+
+select max(num) as num
+from temp
+where countnum = 1
+
+
+1164. Product Price at a Given Date------------------------------------------------
+
+select product_id, new_price as price 
+from Products 
+where (product_id, change_date) 
+in (select product_id , max(change_date) as date 
+    from Products 
+    where change_date <='2019-08-16' 
+    group by product_id)
+
+union
+
+select distinct product_id, 10 as price 
+from Products 
+where product_id not in (
+    select distinct product_id 
+    from Products 
+    where change_date <='2019-08-16' )
+
+
+1148. Article Views I------------------------------------------------
+
+select distinct(author_id) as id
+from Views 
+where author_id  = viewer_id 
+order by id asc
+
+
+596. Classes More Than 5 Students------------------------------------------------
+
+select class
+from Courses 
+group by class 
+having count(*) > 4
+
+
+1378. Replace Employee ID With The Unique Identifier------------------------------------------------
+
+select ei.unique_id, e.name
+from Employees e left join EmployeeUNI ei on e.id = ei.id    
+
+
+1527. Patients With a Condition------------------------------------------------
+
+
+
+
+
+
+
+
