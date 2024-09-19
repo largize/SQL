@@ -62,6 +62,384 @@ from Employees e left join EmployeeUNI ei on e.id = ei.id
 
 1527. Patients With a Condition------------------------------------------------
 
+select *
+from Patients 
+where conditions like 'DIAB1%' or conditions like '% DIAB1%' 
+
+
+180. Consecutive Numbers------------------------------------------------
+
+#Figures may be repeated more than 3 times, using distinct to avoid repeated number
+'using subquery in from'
+select distinct num as ConsecutiveNums 
+from(
+    select num,
+    lag(num, 1) over (order by id) as next1, 
+    lag(num, 2) over (order by id) as next2
+    from Logs) as temp
+where num = next1 and next1= next2
+
+'using cte'
+with cte as (
+    select num,
+    lead(num,1) over() num1,
+    lead(num,2) over() num2
+    from logs)
+
+select distinct num ConsecutiveNums 
+from cte 
+where (num=num1) and (num=num2)
+
+'not using cte or subquery'
+select distinct L1.num as ConsecutiveNums 
+from Logs L1, Logs L2, Logs L3
+where L1.id = L2.id-1 and 
+    L2.id = L3.id-1 and 
+    L1.num = L2.num and 
+    L2.num = L3.num
+
+
+1204. Last Person to Fit in the Bus------------------------------------------------
+
+select person_name
+from (
+    select *, sum(weight) over (order by turn) as Total_Weight
+    from Queue) temp
+where Total_Weight <= 1000
+order by turn desc
+limit 1;
+
+#When using turn: subquery are used to find the passenger with the largest turn value. 
+#but using 'limit1' and 'order by desc' are faster
+select person_name
+from (select person_name, turn, sum(weight) over (order by turn) as Total_Weight
+    from Queue) temp
+where Total_Weight <= 1000
+    and turn = ( select max(turn)
+        from (select turn, sum(weight) over (order by turn) as Total_Weight
+            from Queue) subquery
+        where Total_Weight <= 1000);
+
+
+585. Investments in 2016------------------------------------------------
+
+select round(sum(tiv_2016),2) as tiv_2016
+from Insurance
+where tiv_2015 in (
+    select tiv_2015
+    from Insurance
+    group by tiv_2015
+    having count(*) > 1)
+and (lat, lon) in (
+    select lat, lon
+    from Insurance
+    group by lat, lon
+    having count(*) = 1);
+
+'or using cte'
+with duplicated_tiv2015 as (
+    select tiv_2015
+    from Insurance
+    group by tiv_2015
+    having COUNT(*) > 1),
+unique_location as (
+    select lat, lon
+    from Insurance
+    group by lat, lon
+    having COUNT(*) = 1)
+
+select round(sum(tiv_2016), 2) as tiv_2016
+from Insurance
+where tiv_2015 in (select tiv_2015 from duplicated_tiv2015)
+and (lat, lon) in (select lat, lon from unique_location);
+
+
+185. Department Top Three Salaries------------------------------------------------
+
+select Department, Employee, Salary
+from (
+    select e.name as Employee, 
+        e.salary as Salary, 
+        d.name as Department,
+        dense_rank() over (partition by e.departmentId order by e.salary desc) as salaryrank
+    from Employee e left join Department d on e.departmentId  = d.id) as temp
+where salaryrank <= 3
+
+
+1341. Movie Rating------------------------------------------------
+
+# Write your MySQL query statement below
+(select u.name as results
+from MovieRating r inner join Users u on r.user_id = u.user_id
+group by u.name
+order by count(*) desc, u.name
+limit 1)
+
+union all
+
+(select m.title as results
+from MovieRating r inner join Movies m on r.movie_id = m.movie_id
+where r.created_at >= '2020-02-01' and r.created_at < '2020-03-01' 
+group by m.title
+order by avg(rating) desc, m.title
+limit 1)
+
+
+1731. The Number of Employees Which Report to Each Employee------------------------------------------------
+
+'using cte and inner join. Found reports_to first, then select name'
+with temp as (
+select reports_to, count(reports_to) as reports_count, round(avg(age), 0) as average_age 
+from Employees 
+group by reports_to 
+having count(reports_to) > 0)
+
+select t.reports_to as employee_id, e.name as name, reports_count, average_age
+from temp t left join Employees e on t.reports_to = e.employee_id
+order by employee_id
+
+
+'using inner join. Self join first'
+select 
+    m.employee_id,
+    m.name,
+    count(e.reports_to) as reports_count,
+    round(avg(e.age),0) as average_age
+from employees e inner join employees m 
+    on m.employee_id = e.reports_to
+group by m.employee_id
+order by m.employee_id
+
+
+1321. Restaurant Growth------------------------------------------------
+
+with cte as (
+    select visited_on, sum(amount) as total_amount
+    from Customer 
+    group by visited_on
+    order by visited_on)
+    
+select visited_on, 
+    sum(total_amount) over (rows between 6 preceding and current row) as amount,
+    round(avg(total_amount) over ( 
+        rows between 6 preceding and current row),2) as average_amount
+from cte
+limit 6,999
+
+
+1907. Count Salary Categories------------------------------------------------
+
+'using union'
+select 'Low Salary' as  category, count(account_id) as accounts_count
+from Accounts 
+where income < 20000
+union
+select 'Average Salary' as category, count(account_id) as accounts_count
+from Accounts 
+where  income between 20000 and 50000
+union
+select 'High Salary' as category, count(account_id) as accounts_count
+from Accounts 
+where income > 50000
+
+'using cte and union'
+with ct1 as
+(select case when income < 20000 then "Low Salary"
+when income >= 20000 and income <= 50000 then "Average Salary"
+else "High Salary"
+end as category, account_id
+from accounts) ,
+
+ct2 as
+(select category , count(*) as c
+from ct1
+group by category ) ,
+
+ct3 as
+(select "High Salary" as category
+union select "Low Salary" as category
+union select "Average Salary" as category)
+
+select ct3.category ,
+case when ct2.c is not null
+then ct2.c
+else 0
+end as accounts_count
+from ct2 
+right join ct3 
+on ct2.category = ct3.category;
+
+
+1280. Students and Examinations------------------------------------------------
+
+select st.student_id, st.student_name, su.subject_name, count(e.subject_name) as attended_exams 
+from Students st cross join Subjects su
+    left join Examinations e 
+    on su.subject_name = e.subject_name and st.student_id = e.student_id
+group by st.student_id, st.student_name, su.subject_name
+order by st.student_id, su.subject_name
+
+
+
+1789. Primary Department for Each Employee------------------------------------------------
+
+'using union'
+select  employee_id, department_id 
+from Employee 
+where primary_flag = 'Y'
+union
+select employee_id, department_id 
+from Employee
+group by employee_id 
+having count(employee_id) = 1
+
+'using subquery in where'
+select  employee_id, department_id 
+from Employee 
+where primary_flag = 'Y' or
+    employee_id in (
+        select employee_id
+        from Employee
+        group by employee_id 
+        having count(employee_id) = 1)
+
+
+1667. Fix Names in a Table------------------------------------------------
+
+select user_id,
+    concat(upper(substring(name, 1,1)),  
+    lower(substring(name, 2))) as name
+from Users 
+order by user_id 
+
+1633. Percentage of Users Attended a Contest------------------------------------------------
+'using subquery in select'
+select contest_id, round(count(user_id) / (select distinct count(user_id) from Users) *100, 2) as percentage
+from Register 
+group by contest_id
+order by percentage desc, contest_id
+
+'using join but not very meaningful.'
+select r.contest_id, round(count(u.user_id) / (select count(distinct user_id) from Users) *100, 2) as percentage
+from Register r inner join Users u on r.user_id = u.user_id 
+group by r.contest_id
+order by percentage desc, r.contest_id asc
+
+
+1193. Monthly Transactions I------------------------------------------------
+
+select DATE_FORMAT(trans_date, '%Y-%m') as month,
+    country,
+    count(*) as trans_count,
+    sum(state = 'approved') as approved_count, 
+    sum(amount) as trans_total_amount, 
+    sum(if(state = 'approved', amount, 0)) as approved_total_amount 
+from Transactions 
+group by country, month
+
+#'sum(state = 'approved') as approved_count' is calculated Boolean value (0 or 1) 
+generated by (state = 'approved'), cannot use count to replace sum
+
+
+1517. Find Users With Valid E-Mails------------------------------------------------20
+'using REGEXP'
+
+select * from Users
+WHERE mail REGEXP '^[A-Za-z][A-Za-z0-9_\.\-]*@leetcode(\\?com)?\\.com$';
+
+
+1070. Product Sales Analysis III------------------------------------------------
+
+select product_id, year as first_year, quantity, price 
+from Sales
+where (product_id,year) in
+  (select product_id, min(year) as year
+  from Sales 
+  group by product_id)
+
+
+1978. Employees Whose Manager Left the Company------------------------------------------------
+
+select employee_id 
+from Employees 
+where manager_id not in (select employee_id from Employees) and salary < 30000
+order by employee_id asc
+
+# sub_query的概念，先寫出sub
+# 目標，在要選出產品銷售第一年的product_id, year, quantity, price
+# 先選出有哪些是第一年，把資料用product_id群組，然後找最小的年份
+# select product_id, min(year) as year
+# from Sales Group by product_id
+
+# 然後在main query 找product_id, year, quantity, price，4個行
+# 用where去把 (product_id, year)相關的資料限定在sub query的範圍
+# select product_id, year as first_year, quantity, price
+# from Sales
+# Where (product_id, year) in (subquery)
+
+550. Game Play Analysis IV------------------------------------------------
+
+select round(count(distinct player_id) / (select count(distinct player_id) from Activity), 2) as fraction
+from Activity
+where (player_id, date_sub(event_date, interval 1 day)) in
+  (select player_id, MIN(event_date) as first_login 
+  from Activity 
+  group by player_id)
+
+# select count(distinct player_id) from Activity 用來算Activity中，不重複的player_id
+# 前面沒有from的會依照下方的from...，當成資料來源
+# 下面的from的 where in 是在哪個範圍中做搜尋
+# 又有用where去縮成只有最小日期的部份
+
+#date_sub() 加日期、date_sub() 減日期
+#date_sub(datetime目標日期, INTERVAL expr unit多少數值、單位)，e.g.1 DAY/YESR/MONTH
+
+# where in
+# 1.子查詢要在括號()中。
+# 2.通常子查詢SELECT只會取得單一欄位的值，以便主查詢的欄位進行比較運算。
+# 3.如需排序，子查詢不能使用ORDER BY，只能使用GROUP BY 子句。
+# 4.如果子查詢可以取得多筆資料，在主查詢需使用IN邏輯運算子。
+# https://ithelp.ithome.com.tw/articles/10219497
+
+------------------------------------------------
+
+
+
+------------------------------------------------
+
+
+
+------------------------------------------------
+
+
+
+------------------------------------------------
+
+
+
+------------------------------------------------
+
+
+
+------------------------------------------------
+
+
+
+------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
